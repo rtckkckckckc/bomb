@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0b0f17" />
+  <title>Bomba ⏱️</title>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --panel: rgba(255,255,255,0.06);
+      --text: #e8eefc;
+      --muted: rgba(232,238,252,0.7);
+      --accent: #ff3b3b;
+      --ok: #54d18a;
+      --warn: #ffcc00;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 800px at 50% 20%, #1a2350 0%, var(--bg) 60%, #070a10 100%);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .main {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: 1fr auto;
+    }
+
+    /* Górna część: TYLKO bomba + arena */
+    .arena {
+      position: relative;
+      height: 100vh;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 30%, rgba(255,255,255,0.08) 0%, transparent 50%),
+        radial-gradient(circle 800px at 30% 70%, rgba(255, 59, 59, 0.08), transparent 60%),
+        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.15));
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    /* Bomba dyskretna */
+    .bombWrap {
+      position: relative;
+      width: min(280px, 80vw);
+      height: min(280px, 80vw);
+      max-width: 90vw;
+      max-height: 90vh;
+    }
+    .bomb {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 40% 40%, rgba(255,255,255,0.15) 0%, transparent 35%),
+        radial-gradient(circle at 60% 60%, rgba(0,0,0,0.45), transparent 40%),
+        linear-gradient(145deg, #2a2f3a 0%, #1a1f28 50%, #0f141c 100%);
+      border: 2px solid rgba(255,255,255,0.06);
+      box-shadow: 
+        0 20px 60px rgba(0,0,0,0.6),
+        inset 0 2px 8px rgba(255,255,255,0.08);
+      transition: all 0.2s ease;
+    }
+    .bomb::before {
+      content: "💣";
+      position: absolute;
+      font-size: clamp(48px, 18vw, 120px);
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+      opacity: 0.92;
+    }
+    .bomb::after {
+      content: "";
+      position: absolute;
+      top: -12px;
+      right: -8px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,204,0,0.4) 0%, transparent 70%);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .bomb.hot::after { opacity: 1; animation: fuseSpark 0.6s infinite; }
+    @keyframes fuseSpark {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.3); }
+    }
+
+    /* Subtelne tykanie przez cały czas + przyspieszenie */
+    .bomb.ticking {
+      animation: tickPulse 1.2s infinite ease-in-out;
+    }
+    @keyframes tickPulse {
+      0%, 100% { 
+        box-shadow: 
+          0 20px 60px rgba(0,0,0,0.6),
+          inset 0 2px 8px rgba(255,255,255,0.08); 
+      }
+      50% { 
+        box-shadow: 
+          0 22px 68px rgba(255,204,0,0.12),
+          inset 0 4px 12px rgba(255,255,255,0.12); 
+        transform: scale(1.015);
+      }
+    }
+    .bomb.fast-tick {
+      animation-duration: 0.45s !important; /* 2.5x szybciej */
+    }
+    .bomb.shake { 
+      animation: shake 160ms infinite;
+      box-shadow: 0 24px 80px rgba(255,59,59,0.5);
+    }
+    @keyframes shake {
+      0%, 100% { transform: scale(1) rotate(0deg); }
+      25% { transform: scale(1.02) rotate(-1deg); }
+      50% { transform: scale(1.02) rotate(1deg); }
+      75% { transform: scale(1.02) rotate(-0.5deg); }
+    }
+
+    /* Wybuch */
+    .flash {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 50%, 
+        rgba(255,255,255,1) 0%, 
+        rgba(255, 204, 0, 0.85) 15%, 
+        rgba(255, 59, 59, 0.65) 35%, 
+        rgba(255, 100, 100, 0.3) 55%, 
+        transparent 75%);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .flash.on { 
+      animation: flash 950ms cubic-bezier(.22,.61,.36,1) forwards; 
+    }
+    @keyframes flash {
+      0% { opacity: 0; transform: scale(0.92); }
+      15% { opacity: 1; transform: scale(1.08); }
+      35% { opacity: 0.9; transform: scale(1.18); }
+      100% { opacity: 0; transform: scale(1.35); }
+    }
+
+    .particles { 
+      position: absolute; 
+      inset: 0; 
+      pointer-events: none; 
+      z-index: 9;
+    }
+    .p {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #fff 0%, currentColor 65%, transparent 100%);
+      transform: translate(-50%, -50%);
+      opacity: 0;
+      filter: blur(0.3px);
+    }
+    .p.on {
+      opacity: 1;
+      animation: fly 1300ms cubic-bezier(.25,.46,.45,.94) forwards;
+    }
+    @keyframes fly {
+      0% { 
+        transform: translate(-50%, -50%) rotate(var(--r)) translate(0) scale(1.1); 
+        opacity: 1; filter: blur(0px);
+      }
+      65% { 
+        transform: translate(-50%, -50%) rotate(var(--r)) translate(var(--d)) scale(1.2); 
+        opacity: 0.85; filter: blur(0.5px);
+      }
+      100% { 
+        transform: translate(-50%, -50%) rotate(var(--r)) translate(var(--d)) scale(0.05); 
+        opacity: 0; filter: blur(1.2px);
+      }
+    }
+
+    /* Wibracje całego ekranu */
+    body.exploding { animation: screenShake 280ms cubic-bezier(.36,.07,.19,.97) 3; }
+    @keyframes screenShake {
+      0%, 100% { transform: translate(0,0); }
+      16% { transform: translate(2px, -2px); }
+      33% { transform: translate(-3px, 1px); }
+      50% { transform: translate(1px, -3px); }
+      66% { transform: translate(-2px, 2px); }
+      83% { transform: translate(2px, 1px); }
+    }
+
+    /* Dolna panel konfiguracji – małe, ukryte */
+    .config {
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+    .config label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .config input[type="number"] {
+      width: 60px;
+      padding: 6px 8px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      text-align: center;
+    }
+    .config button {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 13px;
+      min-height: 42px;
+    }
+    .config button.primary {
+      background: rgba(84,209,138,0.2);
+      border-color: rgba(84,209,138,0.4);
+    }
+    .config button:disabled { opacity: 0.4; }
+    .info {
+      margin-left: auto;
+      font-size: 11px;
+      opacity: 0.6;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="main">
+    <div class="arena" id="arena">
+      <div class="bombWrap">
+        <div class="bomb" id="bomb"></div>
+      </div>
+      <div class="flash" id="flash"></div>
+      <div class="particles" id="particles"></div>
+    </div>
+
+    <div class="config">
+      <label>Min<input id="minSec" type="number" min="5" value="10"/></label>
+      <label>Max<input id="maxSec" type="number" min="1" value="35"/></label>
+      <label>Gł.<input id="vol" type="number" min="0" max="100" value="85" style="width:48px"/></label>
+      <label><input id="beep" type="checkbox" checked/>Beep</label>
+      <button id="startBtn" class="primary">Start</button>
+      <button id="stopBtn" disabled>Reset</button>
+      <div class="info">dla dzieci • GitHub</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const el = (id) => document.getElementById(id);
+
+  const minSecEl = el('minSec');
+  const maxSecEl = el('maxSec');
+  const volEl = el('vol');
+  const beepEl = el('beep');
+  const startBtn = el('startBtn');
+  const stopBtn = el('stopBtn');
+
+  const bombEl = el('bomb');
+  const flashEl = el('flash');
+  const particlesEl = el('particles');
+  const arenaEl = document.body;
+
+  let timerId = null;
+  let tickingInterval = null;
+  let remainingMs = 0;
+  let audioCtx = null;
+  let tickInterval = 950;
+
+  function clamp(n,a,b){return Math.max(a,Math.min(b,n));}
+  function randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
+
+  function readRange(){
+    let minS=parseInt(minSecEl.value)||10, maxS=parseInt(maxSecEl.value)||35;
+    minS=Math.max(5,minS); maxS=Math.max(minS,maxS);
+    minSecEl.value=minS; maxSecEl.value=maxS;
+    return{minS,maxS};
+  }
+
+  function ensureAudio(){
+    if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') return audioCtx.resume();
+    return Promise.resolve();
+  }
+
+  function volume(){return clamp(parseInt(volEl.value)||85,0,100)/100;}
+
+  // JEDEN rodzaj pikania – zawsze taki sam!
+  function playTick(){
+    if(!audioCtx||!beepEl.checked) return;
+    const t0=audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(), g=audioCtx.createGain();
+    osc.type='triangle';
+    osc.frequency.value=1200+Math.random()*250; // zawsze ~1200-1450Hz
+    const gain = 0.08 * volume(); // stała głośność
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(gain,t0+0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+0.05);
+    osc.connect(g).connect(audioCtx.destination);
+    osc.start(t0); osc.stop(t0+0.07);
+  }
+
+  function playExplosion(){
+    if(!audioCtx) return;
+    const t0=audioCtx.currentTime;
+    // GŁOŚNIEJSZY szum
+    const bufSz=Math.floor(audioCtx.sampleRate*1.8);
+    const buf=audioCtx.createBuffer(1,bufSz,audioCtx.sampleRate);
+    const data=buf.getChannelData(0);
+    for(let i=0;i<bufSz;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/bufSz,1.4);
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const ng=audioCtx.createGain();
+    ng.gain.setValueAtTime(0.0001,t0);
+    ng.gain.exponentialRampToValueAtTime(1.8*volume(),t0+0.05);
+    ng.gain.exponentialRampToValueAtTime(0.0001,t0+1.6);
+    // GŁOŚNIEJSZY boom
+    const boom=audioCtx.createOscillator(); boom.type='sine';
+    boom.frequency.setValueAtTime(42,t0); boom.frequency.exponentialRampToValueAtTime(18,t0+1.0);
+    const bg=audioCtx.createGain();
+    bg.gain.setValueAtTime(0.0001,t0); bg.gain.exponentialRampToValueAtTime(1.2*volume(),t0+0.06);
+    bg.gain.exponentialRampToValueAtTime(0.0001,t0+1.2);
+    const lp=audioCtx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.setValueAtTime(900,t0);
+    noise.connect(ng).connect(lp).connect(audioCtx.destination);
+    boom.connect(bg).connect(lp);
+    noise.start(t0); boom.start(t0); boom.stop(t0+1.4);
+  }
+
+  function clearParticles(){particlesEl.innerHTML='';}
+
+  function explode(){
+    arenaEl.classList.add('exploding');
+    bombEl.classList.remove('ticking','fast-tick','hot','shake');
+    if(tickingInterval) clearInterval(tickingInterval);
+    flashEl.classList.remove('on'); void flashEl.offsetWidth; flashEl.classList.add('on');
+    
+    for(let i=0;i<85;i++){
+      const p=document.createElement('div');
+      p.className='p';
+      p.style.setProperty('--r',randInt(0,359)+'deg');
+      p.style.setProperty('--d',(randInt(200,500)+(i%5*30))+'px');
+      p.style.color=['#ffcc00','#ff3b3b','#ffffff','#ffa24a','#ff66cc'][randInt(0,4)];
+      particlesEl.appendChild(p); void p.offsetWidth; p.classList.add('on');
+    }
+    
+    playExplosion();
+    startBtn.disabled=true; stopBtn.disabled=false; stopBtn.textContent='Reset';
+  }
+
+  function stop(){
+    if(timerId) clearInterval(timerId);
+    if(tickingInterval) clearInterval(tickingInterval);
+    timerId=null; tickingInterval=null; remainingMs=0;
+    tickInterval=950;
+    arenaEl.classList.remove('exploding');
+    bombEl.classList.remove('hot','shake','fast-tick');
+    flashEl.classList.remove('on'); clearParticles();
+    startBtn.disabled=false; stopBtn.disabled=true; stopBtn.textContent='Reset';
+    bombEl.classList.remove('ticking');
+  }
+
+  function start(){
+    stop();
+    const{minS,maxS}=readRange();
+    const chosenS=randInt(minS,maxS);
+    remainingMs=chosenS*1000;
+    
+    bombEl.classList.add('ticking');
+    tickInterval=950;
+    
+    tickingInterval=setInterval(()=>{
+      playTick(); // ZAWSZE TEN SAM!
+    }, tickInterval + Math.random()*100);
+    
+    ensureAudio().then(()=>{
+      timerId=setInterval(()=>{
+        remainingMs-=1000;
+        
+        if(remainingMs<=5000){ // przyspieszenie od 5s
+          bombEl.classList.add('hot');
+          if(!bombEl.classList.contains('fast-tick')){
+            bombEl.classList.add('fast-tick');
+            clearInterval(tickingInterval);
+            tickInterval=280; // stała prędkość przyspieszona
+            tickingInterval=setInterval(()=>playTick(), tickInterval + Math.random()*40);
+          }
+        }
+        
+        if(remainingMs<=3000) bombEl.classList.add('shake');
+        
+        if(remainingMs<=0){ 
+          clearInterval(timerId); 
+          clearInterval(tickingInterval); 
+          explode(); 
+          return; 
+        }
+      },1000);
+    });
+  }
+
+  startBtn.onclick=()=>{if(startBtn.disabled) return; start(); startBtn.disabled=true; stopBtn.disabled=false;};
+  stopBtn.onclick=stop;
+
+  readRange();
+})();
+</script>
+</body>
+</html>
